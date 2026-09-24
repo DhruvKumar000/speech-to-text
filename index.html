@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech-to-Text with Accuracy & Efficiency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16213A; --paper: #F5F7FB; --card: #FFFFFF; --line: #D9DFEA;
+    --muted: #5C6780; --signal: #1F6FEB; --rec: #E5484D; --ok: #1A7F4B; --warn: #B7791F;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#E8ECF4; --paper:#0F1522; --card:#172033; --line:#2A3550; --muted:#98A3BC;
+            --signal:#5B9BFF; --rec:#FF6B6F; --ok:#4CC38A; --warn:#F2B84B; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font-family: "Manrope", system-ui, -apple-system, sans-serif; line-height: 1.55; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin: 0 0 8px; }
+  h2 { font-size: 1.25rem; margin: 32px 0 10px; }
+  .lead { color: var(--muted); margin: 0 0 28px; max-width: 60ch; }
+
+  .recorder { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; }
+  #recBtn { width: 120px; height: 120px; border-radius: 50%; border: 0; cursor: pointer;
+            background: var(--rec); color: #fff; font: 800 1.05rem "Manrope", sans-serif; transition: transform .15s ease; }
+  #recBtn:hover { transform: scale(1.04); }
+  #recBtn:disabled { opacity: .5; cursor: wait; transform: none; }
+  #recBtn.recording { animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 55%, transparent); }
+                     70% { box-shadow: 0 0 0 24px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  @media (prefers-reduced-motion: reduce) { #recBtn.recording { animation: none; } #recBtn { transition: none; } }
+  #timer { font-size: 2.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: .9rem; }
+  .side { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  select, .file { font: 600 .95rem "Manrope", sans-serif; color: var(--ink); background: var(--card);
+                  border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+  .file { cursor: pointer; } .file input { display: none; }
+  button:focus-visible, select:focus-visible, .file:focus-within { outline: 3px solid var(--signal); outline-offset: 2px; }
+
+  #status { min-height: 1.5em; font-weight: 600; margin: 0 0 12px; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-bottom: 20px; display: none; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--signal); transition: width .2s; }
+
+  #transcript { min-height: 160px; padding: 16px; background: var(--card); border: 1px solid var(--line);
+                border-radius: 10px; font-size: 1.05rem; line-height: 1.8; white-space: pre-wrap; }
+  #transcript:empty::before { content: "Your words appear here after you speak."; color: var(--muted); }
+  .w-mid { background: color-mix(in srgb, var(--warn) 25%, transparent); border-radius: 4px; padding: 0 2px; }
+  .w-low { background: color-mix(in srgb, var(--rec) 25%, transparent); border-radius: 4px; padding: 0 2px; }
+  .legend { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+  .legend span { padding: 0 6px; }
+
+  .scores { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .scores { grid-template-columns: 1fr; } }
+  .score { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .score h3 { margin: 0; font-size: 1rem; color: var(--muted); font-weight: 600; }
+  .big { font-size: 3rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 6px 0 2px; }
+  .verdict { font-weight: 700; margin-bottom: 12px; }
+  .good { color: var(--ok); } .mid { color: var(--warn); } .bad { color: var(--rec); }
+  dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 12px; font-size: .92rem; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .note { color: var(--muted); font-size: .85rem; margin-top: 12px; }
+
+  .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); border-radius: 8px;
+           padding: 9px 14px; font: 600 .9rem "Manrope", sans-serif; cursor: pointer; }
+  footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Speech-to-Text</h1>
+  <p class="lead">Press Record and speak for about a minute (100+ words). When you stop, the app writes down your words and tells you how accurate and how efficient the recognition was.</p>
+
+  <div class="recorder">
+    <button id="recBtn" aria-label="Start recording">Record</button>
+    <div>
+      <div id="timer">0:00</div>
+      <div class="hint">About 60 seconds of speech gives 100+ words.</div>
+    </div>
+  </div>
+
+  <div class="side">
+    <select id="lang" aria-label="Language">
+      <option value="auto">Language: auto-detect</option>
+      <option value="english">English</option>
+      <option value="hindi">Hindi</option>
+    </select>
+    <label class="file" tabindex="0">Or upload audio<input type="file" id="fileIn" accept="audio/*"></label>
+  </div>
+
+  <p id="status" role="status">Loading the speech model...</p>
+  <div class="bar" id="bar"><span id="barFill"></span></div>
+
+  <h2>What you said</h2>
+  <div id="transcript"></div>
+  <div class="legend" id="legend" hidden>
+    <span class="w-mid">yellow</span> = model was unsure, <span class="w-low">red</span> = probably wrong
+  </div>
+  <div class="actions">
+    <button class="ghost" id="copyBtn">Copy text</button>
+    <button class="ghost" id="dlBtn">Download .txt</button>
+  </div>
+
+  <h2>Results</h2>
+  <div class="scores">
+    <section class="score" aria-labelledby="accH">
+      <h3 id="accH">Accuracy</h3>
+      <div class="big" id="accBig">–</div>
+      <div class="verdict" id="accVerdict">Speak to see your score</div>
+      <dl>
+        <dt>Words recognised</dt><dd id="aWords">–</dd>
+        <dt>Clear words</dt><dd id="aClear">–</dd>
+        <dt>Unsure words</dt><dd id="aUnsure">–</dd>
+        <dt>100-word minimum</dt><dd id="aMin">–</dd>
+      </dl>
+    </section>
+    <section class="score" aria-labelledby="effH">
+      <h3 id="effH">Efficiency</h3>
+      <div class="big" id="effBig">–</div>
+      <div class="verdict" id="effVerdict">Speak to see your score</div>
+      <dl>
+        <dt>Audio length</dt><dd id="eLen">–</dd>
+        <dt>Processing time</dt><dd id="eTime">–</dd>
+        <dt>Real-Time Factor</dt><dd id="eRtf">–</dd>
+        <dt>Words per second</dt><dd id="eWps">–</dd>
+        <dt>Running on</dt><dd id="eDev">–</dd>
+      </dl>
+    </section>
+  </div>
+  <p class="note">Accuracy is estimated from how confident the model was about each word it heard, so it works for anything you say. Efficiency compares processing time with the length of your speech: "5× faster" means 60 seconds of speech took about 12 seconds.</p>
+
+  <footer>Built with OpenAI Whisper (base) and Transformers.js. Runs in your browser, so your voice never leaves your device.</footer>
+</main>
+
+<script type="module">
+import { pipeline, LogitsProcessor, LogitsProcessorList }
+  from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3";
+
+const MODEL = "onnx-community/whisper-base";
+const SR = 16000;
+const $ = (id) => document.getElementById(id);
+const status = (t) => ($("status").textContent = t);
+const device = navigator.gpu ? "webgpu" : "wasm";
+let asr = null, lastText = "";
+
+// Records how confident the model was about every token it chose.
+class ConfidenceTracker extends LogitsProcessor {
+  constructor(sink) { super(); this.sink = sink; this.prev = null; }
+  _call(input_ids, logits) {
+    const ids = input_ids[0];
+    if (this.prev) {  // the token chosen at the previous step is now the last input id
+      const tok = Number(ids[ids.length - 1]);
+      this.sink.push([tok, this.prev[tok]]);
+    }
+    const row = logits[0].data;
+    let max = -Infinity;
+    for (let i = 0; i < row.length; i++) if (row[i] > max) max = row[i];
+    const p = new Float32Array(row.length);
+    let sum = 0;
+    for (let i = 0; i < row.length; i++) { p[i] = Math.exp(row[i] - max); sum += p[i]; }
+    for (let i = 0; i < p.length; i++) p[i] /= sum;
+    this.prev = p;
+    return logits;
+  }
+}
+
+async function loadModel() {
+  $("bar").style.display = "block";
+  status("Downloading the speech model (first visit only)...");
+  const progress = {};
+  asr = await pipeline("automatic-speech-recognition", MODEL, {
+    device,
+    dtype: device === "webgpu" ? "fp32" : "q8",
+    progress_callback: (p) => {
+      if (p.status === "progress" && p.total) {
+        progress[p.file] = [p.loaded, p.total];
+        const v = Object.values(progress);
+        $("barFill").style.width = (v.reduce((a, x) => a + x[0], 0) / v.reduce((a, x) => a + x[1], 0) * 100).toFixed(0) + "%";
+      }
+    },
+  });
+  $("bar").style.display = "none";
+  $("recBtn").disabled = false;
+  status("Ready. Press Record and start speaking.");
+}
+
+async function decodeTo16k(blob) {
+  const ctx = new AudioContext({ sampleRate: SR });
+  const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+  let data = buf.getChannelData(0);
+  if (buf.numberOfChannels > 1) { const r = buf.getChannelData(1); data = data.map((v, i) => (v + r[i]) / 2); }
+  ctx.close();
+  return data;
+}
+
+// Split long audio into pieces under 30 s, cutting at the quietest moment so words aren't cut in half.
+function splitAudio(audio) {
+  const maxLen = 28 * SR, search = 3 * SR, frame = 0.02 * SR;
+  const pieces = [];
+  let start = 0;
+  while (start < audio.length) {
+    let end = Math.min(start + maxLen, audio.length);
+    if (end < audio.length) {
+      let best = end, bestE = Infinity;
+      for (let f = end - search; f + frame <= end; f += frame) {
+        let e = 0;
+        for (let i = f; i < f + frame; i++) e += audio[i] * audio[i];
+        if (e < bestE) { bestE = e; best = f + frame / 2; }
+      }
+      end = Math.floor(best);
+    }
+    pieces.push(audio.subarray(start, end));
+    start = end;
+  }
+  return pieces;
+}
+
+// Turn token confidences into words with a confidence each (lowest token in the word).
+function tokensToWords(tokens) {
+  const words = [];
+  let cur = null;
+  for (const [tok, prob] of tokens) {
+    const piece = asr.tokenizer.decode([tok], { skip_special_tokens: true });
+    if (piece === "") continue;  // special token
+    if (!cur || piece.startsWith(" ")) { cur = { toks: [tok], conf: prob }; words.push(cur); }
+    else { cur.toks.push(tok); cur.conf = Math.min(cur.conf, prob); }
+  }
+  return words.map((w) => ({ text: asr.tokenizer.decode(w.toks, { skip_special_tokens: true }).trim(), conf: w.conf }))
+              .filter((w) => w.text);
+}
+
+const esc = (t) => t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+async function run(blob) {
+  $("recBtn").disabled = true;
+  try {
+    status("Reading audio...");
+    const audio = await decodeTo16k(blob);
+    const duration = audio.length / SR;
+    if (duration < 1) throw new Error("the recording is too short");
+    const pieces = splitAudio(audio);
+    const opts = { task: "transcribe" };
+    if ($("lang").value !== "auto") opts.language = $("lang").value;
+
+    let words = [];
+    const t0 = performance.now();
+    for (let i = 0; i < pieces.length; i++) {
+      status(`Transcribing part ${i + 1} of ${pieces.length}...`);
+      const sink = [];
+      const processors = new LogitsProcessorList();
+      processors.push(new ConfidenceTracker(sink));
+      await asr(pieces[i], { ...opts, logits_processor: processors });
+      words = words.concat(tokensToWords(sink));
+    }
+    const secs = (performance.now() - t0) / 1000;
+    show(words, duration, secs);
+  } catch (e) {
+    console.error(e);
+    status("Could not transcribe: " + e.message + ". Try again, or use Chrome for best results.");
+  } finally {
+    $("recBtn").disabled = false;
+  }
+}
+
+function show(words, duration, secs) {
+  lastText = words.map((w) => w.text).join(" ");
+  $("transcript").innerHTML = words.map((w) =>
+    w.conf < 0.4 ? `<span class="w-low" title="Confidence ${(w.conf * 100).toFixed(0)}%">${esc(w.text)}</span>`
+    : w.conf < 0.75 ? `<span class="w-mid" title="Confidence ${(w.conf * 100).toFixed(0)}%">${esc(w.text)}</span>`
+    : esc(w.text)).join(" ");
+  $("legend").hidden = !words.some((w) => w.conf < 0.75);
+
+  // Accuracy
+  const n = words.length;
+  const acc = n ? words.reduce((a, w) => a + w.conf, 0) / n : 0;
+  const unsure = words.filter((w) => w.conf < 0.75).length;
+  $("accBig").textContent = n ? (acc * 100).toFixed(1) + "%" : "–";
+  const [aTxt, aCls] = acc >= 0.9 ? ["Excellent: your speech was very clear", "good"]
+                     : acc >= 0.75 ? ["Good: a few words were uncertain", "mid"]
+                     : ["Low: try speaking slower or closer to the mic", "bad"];
+  $("accVerdict").textContent = n ? aTxt : "No speech detected";
+  $("accVerdict").className = "verdict " + (n ? aCls : "bad");
+  $("accBig").className = "big " + (n ? aCls : "");
+  $("aWords").textContent = n;
+  $("aClear").textContent = n - unsure;
+  $("aUnsure").textContent = unsure;
+  $("aMin").textContent = n >= 100 ? "Met" : `Not met (${n}/100)`;
+  $("aMin").className = n >= 100 ? "good" : "bad";
+
+  // Efficiency
+  const speed = duration / secs;
+  $("effBig").textContent = speed >= 1 ? speed.toFixed(1) + "× faster" : (1 / speed).toFixed(1) + "× slower";
+  const [eTxt, eCls] = speed >= 5 ? ["Excellent: much faster than real time", "good"]
+                     : speed >= 1 ? ["Good: faster than real time", "mid"]
+                     : ["Slow: slower than real time on this device", "bad"];
+  $("effVerdict").textContent = eTxt;
+  $("effVerdict").className = "verdict " + eCls;
+  $("effBig").className = "big " + eCls;
+  $("eLen").textContent = duration.toFixed(1) + " s";
+  $("eTime").textContent = secs.toFixed(1) + " s";
+  $("eRtf").textContent = (secs / duration).toFixed(2);
+  $("eWps").textContent = (n / secs).toFixed(1);
+  $("eDev").textContent = device === "webgpu" ? "GPU (WebGPU)" : "CPU (WASM)";
+
+  status(`Done. Accuracy ${(acc * 100).toFixed(1)}%, ${speed >= 1 ? speed.toFixed(1) + "× faster than real time" : "slower than real time"}.`);
+}
+
+// ---- Recording ----
+let recorder = null, chunks = [], timerId = null, startTs = 0;
+$("recBtn").disabled = true;
+$("recBtn").onclick = async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream);
+    chunks = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      clearInterval(timerId);
+      $("recBtn").classList.remove("recording");
+      $("recBtn").textContent = "Record";
+      $("recBtn").setAttribute("aria-label", "Start recording");
+      run(new Blob(chunks, { type: recorder.mimeType }));
+    };
+    recorder.start();
+    startTs = Date.now();
+    $("timer").textContent = "0:00";
+    timerId = setInterval(() => {
+      const s = Math.floor((Date.now() - startTs) / 1000);
+      $("timer").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }, 250);
+    $("recBtn").classList.add("recording");
+    $("recBtn").textContent = "Stop";
+    $("recBtn").setAttribute("aria-label", "Stop recording");
+    status("Recording... press Stop when you finish speaking.");
+  } catch (e) {
+    status("Microphone blocked. Allow microphone access in your browser, then try again.");
+  }
+};
+
+$("fileIn").onchange = (e) => { const f = e.target.files[0]; if (f && asr) run(f); };
+$("copyBtn").onclick = () => { navigator.clipboard.writeText(lastText); status("Copied to clipboard."); };
+$("dlBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lastText], { type: "text/plain" }));
+  a.download = "transcript.txt"; a.click();
+};
+
+loadModel().catch((e) => status("The model failed to load: " + e.message + ". Refresh the page to try again."));
+</script>
+</body>
+</html>
