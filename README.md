@@ -4,7 +4,7 @@ A speech-to-text project built on OpenAI Whisper. A person speaks (100+ words), 
 writes down the words and reports how **accurate** and how **efficient** the recognition was.
 
 ## Live demo
-- GitHub Pages: `https://YOUR-USERNAME.github.io/speech-to-text/`
+- GitHub Pages: `https://dhruvkumar000.github.io/speech-to-text/`
 - Hugging Face: `https://huggingface.co/spaces/Dhruv00101/speech-to-text-app`
 
 ## Files
